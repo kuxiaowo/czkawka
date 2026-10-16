@@ -1,5 +1,7 @@
 name: Installer fix full quality gate
 on:
+  push:
+    branches: [ci/fedora-installer-gate]
   workflow_dispatch:
 permissions:
   contents: read
