@@ -1,41 +1,39 @@
-name: 🧹 Quality
-
+name: Installer fix full quality gate
 on:
-  push:
-    branches: [ master, main ]
-  pull_request:
-    branches: [ master, main ]
   workflow_dispatch:
-
-env:
-  CARGO_TERM_COLOR: always
-
+permissions:
+  contents: read
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install Gtk 4
-        run: sudo apt update || true; sudo apt install -y libgtk-4-dev libraw-dev libheif-dev libavif-dev libdav1d-dev libasound2-dev -y
-
-      - name: Setup rust version
+        with:
+          ref: fix/fedora-update-status
+          persist-credentials: false
+      - name: Install native dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-4-dev libraw-dev libheif-dev libavif-dev libdav1d-dev libasound2-dev libclang-dev cmake nasm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install quality tools
+        run: |
+          python -m pip install uv rust-just
+          rustup toolchain install 1.94.1 --profile minimal --component rustfmt --component clippy
+          rustup toolchain install nightly --profile minimal --component rustfmt
           rustup default 1.94.1
-          rustup component add rustfmt
-          rustup component add clippy
-
-      - name: Disable optimizations
+      - name: Mirror upstream CI dependency optimization settings
         run: |
           sed -i 's/^\(\[profile\.dev\.package.*\)/#\1/' Cargo.toml
           sed -i 's|^opt-level = 3 # OPT PACKAGES|#opt-level = 3 # OPT PACKAGES|' Cargo.toml
-
-      - name: Check the format
+      - name: Run required just fix on the actual installer fix commit
+        run: just fix
+      - name: Verify no unrelated tracked changes
+        if: always()
         run: |
-          cargo fmt --version
-          cargo fmt --all -- --check
-
-      - name: Run clippy
-        run: |
-          cargo clippy --all-targets --all-features -- -D warnings
-          cargo clippy --all-targets -- -D warnings
+          git restore -- Cargo.toml
+          git diff --stat
+          git diff --exit-code
